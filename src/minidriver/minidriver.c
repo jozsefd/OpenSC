@@ -443,6 +443,8 @@ check_card_reader_status(PCARD_DATA pCardData, const char *name)
 		logprintf(pCardData, 1, "HANDLES CHANGED from  vs->hSCardCtx:0x%08"SC_FORMAT_LEN_SIZE_T"X vs->hScard:0x%08"SC_FORMAT_LEN_SIZE_T"X\n",
 			(size_t)vs->hSCardCtx,
 			(size_t)vs->hScard);
+		return reinit_card_for(pCardData, name);
+		/*
 		if (vs->ctx) {
 			vs->hScard = pCardData->hScard;
 			vs->hSCardCtx = pCardData->hSCardCtx;
@@ -451,6 +453,7 @@ check_card_reader_status(PCARD_DATA pCardData, const char *name)
 			if (r)
 			    MD_FUNC_RETURN(pCardData, 1, SCARD_F_INTERNAL_ERROR);
 		}
+		*/
 	}
 
 	/* This should always work, as BaseCSP should be checking for removal too */
