@@ -320,6 +320,33 @@ static void loghex(PCARD_DATA pCardData, int level, PBYTE data, size_t len)
 		logprintf(pCardData, level, " %04X  %s\n", a, line);
 }
 
+static BOOL md_get_app_config_bool(PCARD_DATA pCardData, char *flag_name, BOOL ret_default)
+{
+	VENDOR_SPECIFIC *vs;
+	BOOL ret = ret_default;
+
+	if (!pCardData)
+		return ret;
+
+	vs = (VENDOR_SPECIFIC*) pCardData->pvVendorSpecific;
+	if (!vs)
+		return ret;
+
+	if (vs->ctx) {
+		int i;
+		for (i = 0; vs->ctx->conf_blocks[i]; i++) {
+			const char* config_entry = scconf_get_str(vs->ctx->conf_blocks[i], flag_name, NULL);
+			if (config_entry != NULL) {
+				ret = scconf_get_bool(vs->ctx->conf_blocks[i], flag_name, ret);
+				break;
+			}
+		}
+	}
+
+	logprintf(pCardData, 2, "flag_name:%s:%s\n", flag_name, ret ? "TRUE": "FALSE");
+	return ret;
+}
+
 static DWORD reinit_card(PCARD_DATA pCardData)
 {
 	VENDOR_SPECIFIC *vs;
@@ -1361,32 +1388,6 @@ md_fs_set_content(PCARD_DATA pCardData, struct md_file *file, unsigned char *blo
 
 static DWORD
 md_build_reader_specific_cardid(PCARD_DATA pCardData,  __out_ecount(dwGuidSize) PSTR szGuid, DWORD dwGuidSize);
-static BOOL md_get_app_config_bool(PCARD_DATA pCardData, char *flag_name, BOOL ret_default)
-{
-	VENDOR_SPECIFIC *vs;
-	BOOL ret = ret_default;
-
-	if (!pCardData)
-		return ret;
-
-	vs = (VENDOR_SPECIFIC*) pCardData->pvVendorSpecific;
-	if (!vs)
-		return ret;
-
-	if (vs->ctx) {
-		int i;
-		for (i = 0; vs->ctx->conf_blocks[i]; i++) {
-			const char* config_entry = scconf_get_str(vs->ctx->conf_blocks[i], flag_name, NULL);
-			if (config_entry != NULL) {
-				ret = scconf_get_bool(vs->ctx->conf_blocks[i], flag_name, ret);
-				break;
-			}
-		}
-	}
-
-	logprintf(pCardData, 2, "flag_name:%s:%s\n", flag_name, ret ? "TRUE": "FALSE");
-	return ret;
-}
 
 /*
  * Set 'cardid' from the 'serialNumber' attribute of the 'tokenInfo'
