@@ -445,7 +445,8 @@ check_card_reader_status(PCARD_DATA pCardData, const char *name)
 			(size_t)vs->hSCardCtx,
 			(size_t)vs->hScard);
 		if (vs->ctx) {
-			if (1 == pcsc_check_reader_handles(vs->ctx, vs->reader, &pCardData->hSCardCtx, &pCardData->hScard)) {
+			if (md_get_app_config_bool(pCardData, "force_reinit_card", FALSE) ||
+				1 == pcsc_check_reader_handles(vs->ctx, vs->reader, &pCardData->hSCardCtx, &pCardData->hScard)) {
 				_sc_delete_reader(vs->ctx, vs->reader);
 				MD_FUNC_RETURN(pCardData, 1, reinit_card_for(pCardData, name));
 			} else {
