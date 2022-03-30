@@ -1885,16 +1885,24 @@ static int starcos_compute_signature(sc_card_t *card,
 			if (ex_data->fix_digestInfo) {
 				// need to pad data
 				unsigned int flags = ex_data->fix_digestInfo & SC_ALGORITHM_RSA_HASHES;
+				sc_log(card->ctx,  "Fixing digest info, flags=0x%X, original digest=%s", ex_data->fix_digestInfo, sc_dump_hex(data, datalen));
+
 				if (flags == 0x00) {
 					flags = SC_ALGORITHM_RSA_HASH_NONE;
 				}
 				tmp_len = sizeof(sbuf);
-				r = sc_pkcs1_encode(card->ctx, flags, data, datalen, sbuf, &tmp_len, sizeof(sbuf)*8, NULL);
+				if (ex_data->fix_digestInfo & SC_ALGORITHM_RSA_PAD_PSS) {
+					r = sc_pkcs1_strip_digest_info_prefix(NULL, data, datalen, sbuf, &tmp_len);
+				} else {
+					r = sc_pkcs1_encode(card->ctx, flags, data, datalen, sbuf, &tmp_len, sizeof(sbuf)*8, NULL);
+				}
 				LOG_TEST_RET(card->ctx, r, "sc_pkcs1_encode failed");
 			} else {
 				memcpy(sbuf, data, datalen);
 				tmp_len = datalen;
 			}
+
+			sc_log(card->ctx,  "Using digest: %s", sc_dump_hex(sbuf, tmp_len));
 
 			apdu.data = sbuf;
 			apdu.datalen = tmp_len;
