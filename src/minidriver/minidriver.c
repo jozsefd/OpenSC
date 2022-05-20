@@ -320,33 +320,6 @@ static void loghex(PCARD_DATA pCardData, int level, PBYTE data, size_t len)
 		logprintf(pCardData, level, " %04X  %s\n", a, line);
 }
 
-static BOOL md_get_app_config_bool(PCARD_DATA pCardData, char *flag_name, BOOL ret_default)
-{
-	VENDOR_SPECIFIC *vs;
-	BOOL ret = ret_default;
-
-	if (!pCardData)
-		return ret;
-
-	vs = (VENDOR_SPECIFIC*) pCardData->pvVendorSpecific;
-	if (!vs)
-		return ret;
-
-	if (vs->ctx) {
-		int i;
-		for (i = 0; vs->ctx->conf_blocks[i]; i++) {
-			const char* config_entry = scconf_get_str(vs->ctx->conf_blocks[i], flag_name, NULL);
-			if (config_entry != NULL) {
-				ret = scconf_get_bool(vs->ctx->conf_blocks[i], flag_name, ret);
-				break;
-			}
-		}
-	}
-
-	logprintf(pCardData, 2, "flag_name:%s:%s\n", flag_name, ret ? "TRUE": "FALSE");
-	return ret;
-}
-
 static DWORD reinit_card(PCARD_DATA pCardData)
 {
 	VENDOR_SPECIFIC *vs;
@@ -471,20 +444,7 @@ check_card_reader_status(PCARD_DATA pCardData, const char *name)
 		logprintf(pCardData, 1, "HANDLES CHANGED from  vs->hSCardCtx:0x%08"SC_FORMAT_LEN_SIZE_T"X vs->hScard:0x%08"SC_FORMAT_LEN_SIZE_T"X\n",
 			(size_t)vs->hSCardCtx,
 			(size_t)vs->hScard);
-		if (vs->ctx) {
-			if (md_get_app_config_bool(pCardData, "force_reinit_card", FALSE) ||
-				1 == pcsc_check_reader_handles(vs->ctx, vs->reader, &pCardData->hSCardCtx, &pCardData->hScard)) {
-				_sc_delete_reader(vs->ctx, vs->reader);
-				MD_FUNC_RETURN(pCardData, 1, reinit_card_for(pCardData, name));
-			} else {
-				vs->hScard = pCardData->hScard;
-				vs->hSCardCtx = pCardData->hSCardCtx;
-				r = sc_ctx_use_reader(vs->ctx, &vs->hSCardCtx, &vs->hScard);
-				logprintf(pCardData, 1, "sc_ctx_use_reader returned %d\n", r);
-				if (r)
-					MD_FUNC_RETURN(pCardData, 1, SCARD_F_INTERNAL_ERROR);
-			}
-		}
+		return reinit_card_for(pCardData, name);
 	}
 
 	/* This should always work, as BaseCSP should be checking for removal too */
