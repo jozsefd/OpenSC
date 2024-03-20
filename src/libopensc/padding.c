@@ -224,6 +224,44 @@ sc_pkcs1_strip_02_padding_constant_time(sc_context_t *ctx, unsigned int n, const
 	return constant_time_select(good, mlen, SC_ERROR_WRONG_PADDING);
 }
 
+int
+sc_pkcs1_strip_02_padding(sc_context_t *ctx, const u8 *data, size_t len, u8 *out, size_t *out_len)
+{
+	unsigned int	n = 0;
+
+	LOG_FUNC_CALLED(ctx);
+	if (data == NULL || len < 3)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+
+	/* skip leading zero byte */
+	if (*data == 0) {
+		data++;
+		len--;
+	}
+	if (data[0] != 0x02)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_WRONG_PADDING);
+	/* skip over padding bytes */
+	for (n = 1; n < len && data[n]; n++)
+		;
+	/* Must be at least 8 pad bytes */
+	if (n >= len || n < 9)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_WRONG_PADDING);
+	n++;
+	if (out == NULL)
+		/* just check the padding */
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+	/* Now move decrypted contents to head of buffer */
+	if (*out_len < len - n)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	*out_len = len - n;
+	memmove(out, data + n, *out_len);
+
+	sc_log(ctx, "stripped output(%"SC_FORMAT_LEN_SIZE_T"u): %s", len - n,
+	       sc_dump_hex(out, len - n));
+	LOG_FUNC_RETURN(ctx, len - n);
+}
+
 #ifdef ENABLE_OPENSSL
 static int mgf1(u8 *mask, size_t len, u8 *seed, size_t seedLen, const EVP_MD *dgst)
 {
