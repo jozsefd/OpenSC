@@ -514,8 +514,10 @@ get_pin_by_name(PCARD_DATA pCardData, struct sc_pkcs15_card *p15card, int role, 
 		MD_FUNC_RETURN(pCardData, 1, SCARD_F_INTERNAL_ERROR);
 
 	memset(str_path, 0, sizeof(str_path));
-	sc_bin_to_hex(p15card->app->path.value, p15card->app->path.len, str_path, sizeof(str_path), 0);
-	blocks = scconf_find_blocks(p15card->card->ctx->conf, conf_block, "application", str_path);
+	if ( p15card->app != NULL ) {
+		sc_bin_to_hex(p15card->app->path.value, p15card->app->path.len, str_path, sizeof(str_path), 0);
+		blocks = scconf_find_blocks(p15card->card->ctx->conf, conf_block, "application", str_path);
+	}
 	if (blocks)   {
 		if (blocks[0]) {
 			pin = (char *)scconf_get_str(blocks[0], pin_type, NULL);
@@ -4659,7 +4661,7 @@ DWORD WINAPI CardRSADecrypt(__in PCARD_DATA pCardData,
 					unsigned int temp = pInfo->cbData;
 					logprintf(pCardData, 2, "sc_pkcs15_decipher: stripping PKCS1 padding\n");
 					r = sc_pkcs1_strip_02_padding_constant_time(vs->ctx, prkey_info->modulus_length / 8, pbuf2, pInfo->cbData, pbuf2, &temp);
-					pInfo->cbData = (DWORD) temp;
+					pInfo->cbData = (DWORD) r;
 					wrong_padding = constant_time_eq_i(r, SC_ERROR_WRONG_PADDING);
 					/* continue without returning error to not leak that padding is wrong
 					   to prevent time side-channel leak for Marvin attack*/
@@ -4710,7 +4712,7 @@ DWORD WINAPI CardRSADecrypt(__in PCARD_DATA pCardData,
 		goto err;
 	}
 
-	good = constant_time_eq_i(r, 0);
+	good = constant_time_lt(0, r); //constant_time_eq_i(r, 0);
 	/* if no error or padding error, do not return here to prevent Marvin attack */
 	if (!(good | wrong_padding) && r < 0)   {
 		logprintf(pCardData, 2, "sc_pkcs15_decipher error(%i): %s\n", r, sc_strerror(r));
