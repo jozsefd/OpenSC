@@ -31,6 +31,9 @@
 static const char name_Card[] = "NQ-Applet";
 static const char name_Vendor[] = "NXP";
 
+/* Our AID */
+static struct sc_aid nqApplet_aid = { { 0xd2, 0x76, 0x00, 0x01, 0x80, 0xBA, 0x01, 0x44, 0x02, 0x01, 0x00 }, 11 };
+
 static int get_nqapplet_certificate(sc_card_t *card, u8 data_id, struct sc_pkcs15_der *cert_info)
 {
 	int rv;
@@ -178,6 +181,7 @@ int sc_pkcs15emu_nqapplet_init_ex(sc_pkcs15_card_t *p15card, struct sc_aid *aid)
 	int rv = SC_ERROR_WRONG_CARD;
 	sc_context_t *ctx;
 	sc_card_t *card;
+	struct sc_app_info *appinfo;
 
 	if (!p15card || !p15card->card || !p15card->card->ctx) {
 		return SC_ERROR_INVALID_ARGUMENTS;
@@ -192,6 +196,15 @@ int sc_pkcs15emu_nqapplet_init_ex(sc_pkcs15_card_t *p15card, struct sc_aid *aid)
 		sc_log(p15card->card->ctx, "Unsupported card type: %d", card->type);
 		return SC_ERROR_WRONG_CARD;
 	}
+
+	appinfo = calloc(1, sizeof(struct sc_app_info));
+	if (appinfo == NULL) {
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
+	}
+
+	appinfo->aid = nqApplet_aid;
+	appinfo->ddo.aid = nqApplet_aid;
+	p15card->app = appinfo;
 
 	rv = add_nqapplet_objects(p15card);
 	LOG_TEST_GOTO_ERR(ctx, rv, "Failed to add PKCS15");
