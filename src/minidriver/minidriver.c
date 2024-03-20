@@ -4529,8 +4529,213 @@ err:
 	MD_FUNC_RETURN(pCardData, 1, dwret);
 }
 
-
 DWORD WINAPI CardRSADecrypt(__in PCARD_DATA pCardData,
+	__inout PCARD_RSA_DECRYPT_INFO  pInfo)
+
+{
+	DWORD dwret;
+	int r, opt_crypt_flags = 0;
+	unsigned ui;
+	VENDOR_SPECIFIC *vs;
+	struct sc_pkcs15_prkey_info *prkey_info;
+	BYTE *pbuf = NULL, *pbuf2 = NULL;
+	struct sc_pkcs15_object *pkey = NULL;
+	struct sc_algorithm_info *alg_info = NULL;
+
+	MD_FUNC_CALLED(pCardData, 1);
+
+	logprintf(pCardData, 1, "\nP:%lu T:%lu pCardData:%p ",
+		  (unsigned long)GetCurrentProcessId(),
+		  (unsigned long)GetCurrentThreadId(), pCardData);
+	logprintf(pCardData, 1, "CardRSADecrypt\n");
+
+	if (!pCardData || !pInfo || pInfo->pbData == NULL)
+		MD_FUNC_RETURN(pCardData, 1, SCARD_E_INVALID_PARAMETER);
+	if (pInfo->dwVersion > CARD_RSA_KEY_DECRYPT_INFO_CURRENT_VERSION)
+		MD_FUNC_RETURN(pCardData, 1, ERROR_REVISION_MISMATCH);
+	if ( pInfo->dwVersion < CARD_RSA_KEY_DECRYPT_INFO_CURRENT_VERSION
+			&& pCardData->dwVersion == CARD_DATA_CURRENT_VERSION)
+		MD_FUNC_RETURN(pCardData, 1, ERROR_REVISION_MISMATCH);
+	if (pInfo->dwKeySpec != AT_KEYEXCHANGE)
+		MD_FUNC_RETURN(pCardData, 1, SCARD_E_INVALID_PARAMETER);
+
+	if (!lock(pCardData))
+		MD_FUNC_RETURN(pCardData, 1, SCARD_E_INVALID_PARAMETER);
+
+	dwret = check_card_reader_status(pCardData, "CardRSADecrypt");
+	if (dwret != SCARD_S_SUCCESS)
+		goto err;
+
+	vs = (VENDOR_SPECIFIC*)(pCardData->pvVendorSpecific);
+	if (!vs) {
+		dwret = SCARD_E_INVALID_PARAMETER;
+		goto err;
+	}
+
+	/* check if the container exists */
+	if (pInfo->bContainerIndex >= MD_MAX_KEY_CONTAINERS) {
+		dwret = SCARD_E_NO_KEY_CONTAINER;
+		goto err;
+	}
+
+	logprintf(pCardData, 2,
+		  "CardRSADecrypt dwVersion=%lu, bContainerIndex=%u, dwKeySpec=%lu pbData=%p, cbData=%lu\n",
+		  (unsigned long)pInfo->dwVersion,
+		  (unsigned int)pInfo->bContainerIndex,
+		  (unsigned long)pInfo->dwKeySpec, pInfo->pbData,
+		  (unsigned long)pInfo->cbData);
+
+	if (pInfo->dwVersion >= CARD_RSA_KEY_DECRYPT_INFO_VERSION_TWO)
+		logprintf(pCardData, 2,
+			  "  pPaddingInfo=%p dwPaddingType=0x%08X\n",
+			  pInfo->pPaddingInfo,
+			  (unsigned int)pInfo->dwPaddingType);
+
+	pkey = vs->p15_containers[pInfo->bContainerIndex].prkey_obj;
+	if (!pkey)   {
+		logprintf(pCardData, 2, "CardRSADecrypt prkey not found\n");
+		dwret = SCARD_E_NO_KEY_CONTAINER;
+		goto err;
+	}
+
+	/* input and output buffers are always the same size */
+	pbuf = pCardData->pfnCspAlloc(pInfo->cbData);
+	if (!pbuf) {
+		dwret = SCARD_E_NO_MEMORY;
+		goto err;
+	}
+
+	pbuf2 = pCardData->pfnCspAlloc(pInfo->cbData);
+	if (!pbuf2) {
+		pCardData->pfnCspFree(pbuf);
+		dwret = SCARD_E_NO_MEMORY;
+		goto err;
+	}
+
+	/*inversion donnees*/
+	for(ui = 0; ui < pInfo->cbData; ui++)
+		pbuf[ui] = pInfo->pbData[pInfo->cbData-ui-1];
+	logprintf(pCardData, 2, "Data to be decrypted (inverted):\n");
+	loghex(pCardData, 7, pbuf, pInfo->cbData);
+
+	prkey_info = (struct sc_pkcs15_prkey_info *)(pkey->data);
+	alg_info = sc_card_find_rsa_alg(vs->p15card->card, (unsigned int) prkey_info->modulus_length);
+	if (!alg_info)   {
+		logprintf(pCardData, 2,
+			  "Cannot get appropriate RSA card algorithm for key size %"SC_FORMAT_LEN_SIZE_T"u\n",
+			  prkey_info->modulus_length);
+		pCardData->pfnCspFree(pbuf);
+		pCardData->pfnCspFree(pbuf2);
+		dwret = SCARD_F_INTERNAL_ERROR;
+		goto err;
+	}
+
+	/* filter bogus input: the data to decrypt is shorter than the RSA key ? */
+	if ( pInfo->cbData < prkey_info->modulus_length / 8)
+	{
+		/* according to the minidriver specs, this is the error code to return
+		(instead of invalid parameter when the call is forwarded to the card implementation) */
+		pCardData->pfnCspFree(pbuf);
+		pCardData->pfnCspFree(pbuf2);
+		dwret = SCARD_E_INSUFFICIENT_BUFFER;
+		goto err;
+	}
+
+	if (alg_info->flags & SC_ALGORITHM_RSA_RAW)   {
+		logprintf(pCardData, 2, "sc_pkcs15_decipher: using RSA-RAW mechanism\n");
+		r = sc_pkcs15_decipher(vs->p15card, pkey, opt_crypt_flags, pbuf, pInfo->cbData, pbuf2, pInfo->cbData, NULL);
+		logprintf(pCardData, 2, "sc_pkcs15_decipher returned %d\n", r);
+
+		if (r > 0) {
+			/* Need to handle padding */
+			if (pInfo->dwVersion >= CARD_RSA_KEY_DECRYPT_INFO_VERSION_TWO) {
+				logprintf(pCardData, 2,
+					  "sc_pkcs15_decipher: DECRYPT-INFO dwVersion=%lu\n",
+					  (unsigned long)pInfo->dwVersion);
+				if (pInfo->dwPaddingType == CARD_PADDING_PKCS1)   {
+					size_t temp = pInfo->cbData;
+					logprintf(pCardData, 2, "sc_pkcs15_decipher: stripping PKCS1 padding\n");
+					r = sc_pkcs1_strip_02_padding(vs->ctx, pbuf2, pInfo->cbData, pbuf2, &temp);
+					pInfo->cbData = (DWORD) temp;
+					if (r < 0)   {
+						logprintf(pCardData, 2, "Cannot strip PKCS1 padding: %i\n", r);
+						pCardData->pfnCspFree(pbuf);
+						pCardData->pfnCspFree(pbuf2);
+						dwret = SCARD_F_INTERNAL_ERROR;
+						goto err;
+					}
+				}
+				else if (pInfo->dwPaddingType == CARD_PADDING_OAEP)   {
+					/* TODO: Handle OAEP padding if present - can call PFN_CSP_UNPAD_DATA */
+					logprintf(pCardData, 2, "OAEP padding not implemented\n");
+					pCardData->pfnCspFree(pbuf);
+					pCardData->pfnCspFree(pbuf2);
+					dwret = SCARD_F_INTERNAL_ERROR;
+					goto err;
+				}
+			}
+		}
+	}
+	else if (alg_info->flags & SC_ALGORITHM_RSA_PAD_PKCS1)   {
+		logprintf(pCardData, 2, "sc_pkcs15_decipher: using RSA_PAD_PKCS1 mechanism\n");
+		r = sc_pkcs15_decipher(vs->p15card, pkey, opt_crypt_flags | SC_ALGORITHM_RSA_PAD_PKCS1,
+				pbuf, pInfo->cbData, pbuf2, pInfo->cbData, NULL);
+		logprintf(pCardData, 2, "sc_pkcs15_decipher returned %d\n", r);
+		if (r > 0) {
+			/* No padding info, or padding info none */
+			if ((pInfo->dwVersion < CARD_RSA_KEY_DECRYPT_INFO_VERSION_TWO) ||
+					((pInfo->dwVersion >= CARD_RSA_KEY_DECRYPT_INFO_VERSION_TWO) && (pInfo->dwPaddingType == CARD_PADDING_NONE))) {
+				if ((unsigned)r <= pInfo->cbData - 9)	{
+					/* add pkcs1 02 padding */
+					logprintf(pCardData, 2, "Add '%s' to the output data", "PKCS#1 BT02 padding");
+					memset(pbuf, 0x30, pInfo->cbData);
+					*(pbuf + 0) = 0;
+					*(pbuf + 1) = 2;
+					memcpy(pbuf + pInfo->cbData - r, pbuf2, r);
+					*(pbuf + pInfo->cbData - r - 1) = 0;
+					memcpy(pbuf2, pbuf, pInfo->cbData);
+				}
+			}
+			else if (pInfo->dwPaddingType == CARD_PADDING_PKCS1) {
+				/* PKCS1 padding is already handled by the card... */
+				pInfo->cbData = r;
+			}
+			/* TODO: Handle OAEP padding if present - can call PFN_CSP_UNPAD_DATA */
+		}
+	}
+	else    {
+		logprintf(pCardData, 2, "CardRSADecrypt: no usable RSA algorithm\n");
+		pCardData->pfnCspFree(pbuf);
+		pCardData->pfnCspFree(pbuf2);
+		dwret = SCARD_E_INVALID_PARAMETER;
+		goto err;
+	}
+
+	if ( r < 0)   {
+		logprintf(pCardData, 2, "sc_pkcs15_decipher error(%i): %s\n", r, sc_strerror(r));
+		pCardData->pfnCspFree(pbuf);
+		pCardData->pfnCspFree(pbuf2);
+		dwret = md_translate_OpenSC_to_Windows_error(r, SCARD_E_INVALID_VALUE);
+		goto err;
+	}
+
+	logprintf(pCardData, 2, "decrypted data(%lu):\n",
+		  (unsigned long)pInfo->cbData);
+	loghex(pCardData, 7, pbuf2, pInfo->cbData);
+
+	/*inversion donnees */
+	for(ui = 0; ui < pInfo->cbData; ui++)
+		pInfo->pbData[ui] = pbuf2[pInfo->cbData-ui-1];
+
+	pCardData->pfnCspFree(pbuf);
+	pCardData->pfnCspFree(pbuf2);
+
+err:
+	unlock(pCardData);
+	MD_FUNC_RETURN(pCardData, 1, dwret);
+}
+
+DWORD WINAPI CardRSADecrypt0(__in PCARD_DATA pCardData,
 	__inout PCARD_RSA_DECRYPT_INFO  pInfo)
 
 {
@@ -4656,9 +4861,10 @@ DWORD WINAPI CardRSADecrypt(__in PCARD_DATA pCardData,
 					  "sc_pkcs15_decipher: DECRYPT-INFO dwVersion=%lu\n",
 					  (unsigned long)pInfo->dwVersion);
 				if (pInfo->dwPaddingType == CARD_PADDING_PKCS1)   {
-					unsigned int temp = pInfo->cbData;
+					size_t temp = pInfo->cbData;
 					logprintf(pCardData, 2, "sc_pkcs15_decipher: stripping PKCS1 padding\n");
-					r = sc_pkcs1_strip_02_padding_constant_time(vs->ctx, prkey_info->modulus_length / 8, pbuf2, pInfo->cbData, pbuf2, &temp);
+					//r = sc_pkcs1_strip_02_padding_constant_time(vs->ctx, prkey_info->modulus_length / 8, pbuf2, pInfo->cbData, pbuf2, &temp);
+					r = sc_pkcs1_strip_02_padding(vs->ctx, pbuf2, temp, pbuf2, &temp);
 					pInfo->cbData = (DWORD) temp;
 					wrong_padding = constant_time_eq_i(r, SC_ERROR_WRONG_PADDING);
 					/* continue without returning error to not leak that padding is wrong
