@@ -33,14 +33,15 @@ WIX_LIBS = "$(WIX)\SDK\$(WIXVSVER)\lib\$(PLATFORM)\dutil.lib" "$(WIX)\SDK\$(WIXV
 SM_DEF = /DENABLE_SM
 
 #Build with debugging support
-#DEBUG_DEF = /DDEBUG
+#TODO: remove debug flag!
+DEBUG_DEF = /DDEBUG
 
 # If you want support for OpenSSL (needed for pkcs15-init tool, software hashing in PKCS#11 library and verification):
 # - download and build OpenSSL
 # - uncomment the line starting with OPENSSL_DEF
 # - set the OPENSSL_INCL_DIR below to your openssl include directory, preceded by "/I"
 # - set the OPENSSL_LIB below to your openssl lib file
-#OPENSSL_DEF= /DENABLE_OPENSSL
+OPENSSL_DEF= /DENABLE_OPENSSL
 !IF "$(OPENSSL_DEF)" == "/DENABLE_OPENSSL"
 !IF "$(OPENSSL_DIR)" == ""
 !IF "$(PLATFORM)" == "x86"
