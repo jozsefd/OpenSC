@@ -356,6 +356,10 @@ int sc_ctx_log_to_file(sc_context_t *ctx, const char* filename)
 		ctx->debug_file = stdout;
 	else if (!strcmp(filename, "stderr"))
 		ctx->debug_file = stderr;
+#ifdef _WIN32
+	else if (!strcmp(filename, "/dev/null"))
+		ctx->debug_file = NULL;
+#endif
 	else {
 		ctx->debug_file = fopen(filename, "a");
 		if (ctx->debug_file == NULL)
