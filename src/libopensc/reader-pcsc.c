@@ -1385,7 +1385,6 @@ static int pcsc_detect_readers(sc_context_t *ctx)
 	char *reader_buf = NULL, *reader_name;
 	const char *mszGroups = NULL;
 	int ret = SC_ERROR_INTERNAL;
-	LONG rc;
 	unsigned int i;
 
 	LOG_FUNC_CALLED(ctx);
@@ -2548,6 +2547,7 @@ int pcsc_use_reader(sc_context_t *ctx, void * pcsc_context_handle, void * pcsc_c
 	char reader_name[128];
 	DWORD reader_name_size = sizeof(reader_name);
 	int ret = SC_ERROR_INTERNAL;
+	LONG rc;
 
 	LOG_FUNC_CALLED(ctx);
 
