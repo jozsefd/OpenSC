@@ -23,6 +23,7 @@
 #include "config.h"
 #endif
 
+#define EXPERIMENTAL
 #ifdef ENABLE_PCSC	/* empty file without pcsc */
 
 #include <assert.h>
@@ -2586,11 +2587,22 @@ int pcsc_use_reader(sc_context_t *ctx, void * pcsc_context_handle, void * pcsc_c
 				SCARD_ATTR_DEVICE_SYSTEM_NAME_A, (LPBYTE)
 				reader_name, &reader_name_size);
 	if(SCARD_S_SUCCESS != rc) {
-		// falback: if SCARD_ATTR_DEVICE_SYSTEM_NAME_A not supported, trying SCARD_ATTR_DEVICE_FRIENDLY_NAME_A
+		// fallback: if SCARD_ATTR_DEVICE_SYSTEM_NAME_A not supported, trying SCARD_ATTR_DEVICE_FRIENDLY_NAME_A
 		rc = gpriv->SCardGetAttrib(card_handle,
 				SCARD_ATTR_DEVICE_FRIENDLY_NAME_A, (LPBYTE)
 				reader_name, &reader_name_size);
-	}				
+	}
+	if(SCARD_S_SUCCESS != rc) {
+		// fallback: if neither SCARD_ATTR_DEVICE_SYSTEM_NAME_A nor SCARD_ATTR_DEVICE_FRIENDLY_NAME_A are supported, try SCardListReaders and get the first
+		DWORD dwLen = reader_name_size;
+		rc = gpriv->SCardListReaders(gpriv->pcsc_ctx, NULL, reader_name, &dwLen);
+		if (rc == SCARD_S_SUCCESS) {
+			sc_log(ctx, "Using first reader name '%s'", reader_name);
+		} else {
+			PCSC_LOG(ctx, "SCardListReaders failed", rc);
+		}
+	}
+
 	if(SCARD_S_SUCCESS == rc) {
 		sc_reader_t *reader = NULL;
 
