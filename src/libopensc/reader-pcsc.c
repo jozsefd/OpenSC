@@ -2575,6 +2575,7 @@ int pcsc_use_reader(sc_context_t *ctx, void * pcsc_context_handle, void * pcsc_c
 	char reader_name[128];
 	DWORD reader_name_size = sizeof(reader_name);
 	int ret = SC_ERROR_INTERNAL;
+	LONG rc;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -2612,9 +2613,16 @@ int pcsc_use_reader(sc_context_t *ctx, void * pcsc_context_handle, void * pcsc_c
 	gpriv->pcsc_ctx = *(SCARDCONTEXT *)pcsc_context_handle;
 	card_handle = *(SCARDHANDLE *)pcsc_card_handle;
 
-	if(SCARD_S_SUCCESS == gpriv->SCardGetAttrib(card_handle,
+	rc = SCARD_S_SUCCESS == gpriv->SCardGetAttrib(card_handle,
 				SCARD_ATTR_DEVICE_SYSTEM_NAME_A, (LPBYTE)
-				reader_name, &reader_name_size)) {
+				reader_name, &reader_name_size);
+	if(SCARD_S_SUCCESS != rc) {
+		// fallback: if SCARD_ATTR_DEVICE_SYSTEM_NAME_A not supported, trying SCARD_ATTR_DEVICE_FRIENDLY_NAME_A
+		rc = gpriv->SCardGetAttrib(card_handle,
+				SCARD_ATTR_DEVICE_FRIENDLY_NAME_A, (LPBYTE)
+				reader_name, &reader_name_size);
+	}				
+	if(SCARD_S_SUCCESS == rc) {
 		sc_reader_t *reader = NULL;
 
 		ret = pcsc_add_reader(ctx, reader_name, reader_name_size, &reader);
