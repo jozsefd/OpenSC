@@ -34,6 +34,7 @@ BUILD_TYPE = MT
 # - uncomment the line starting with OPENSSL_DEF
 # - set the OPENSSL_INCL_DIR below to your openssl include directory, preceded by "/I"
 # - set the OPENSSL_LIB below to your openssl lib file
+OPENSSL_VER=1.1.1
 OPENSSL_DEF= /DENABLE_OPENSSL
 !IF "$(OPENSSL_DEF)" == "/DENABLE_OPENSSL"
 !IF "$(OPENSSL_DIR)" == ""
