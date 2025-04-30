@@ -2603,7 +2603,7 @@ int pcsc_use_reader(sc_context_t *ctx, void * pcsc_context_handle, void * pcsc_c
 	gpriv->pcsc_ctx = *(SCARDCONTEXT *)pcsc_context_handle;
 	card_handle = *(SCARDHANDLE *)pcsc_card_handle;
 
-	rc = SCARD_S_SUCCESS == gpriv->SCardGetAttrib(card_handle,
+	rc = gpriv->SCardGetAttrib(card_handle,
 				SCARD_ATTR_DEVICE_SYSTEM_NAME_A, (LPBYTE)
 				reader_name, &reader_name_size);
 	if(SCARD_S_SUCCESS != rc) {
