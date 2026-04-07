@@ -32,12 +32,12 @@ WIX_LIBS = "$(WIX_PACKAGES)/wixtoolset.dutil/$(WIX_VERSION)/build/native/v14/$(P
 #TESTS_DEF = /DENABLE_TESTS
 
 #Include support for Secure Messaging
-SM_DEF = /DENABLE_SM
+#SM_DEF = /DENABLE_SM
 
 #Build with debugging support
 #DEBUG_DEF = /DDEBUG
 #Release build, disable asserts
-#DEBUG_DEF = /DNDEBUG
+DEBUG_DEF = /DNDEBUG
 
 !IF "$(BUILD_TYPE)" == ""
 !IF "$(DEBUG_DEF)" == "/DDEBUG"
@@ -52,7 +52,8 @@ BUILD_TYPE = MT
 # - uncomment the line starting with OPENSSL_DEF
 # - set the OPENSSL_INCL_DIR below to your openssl include directory, preceded by "/I"
 # - set the OPENSSL_LIB below to your openssl lib file
-#OPENSSL_DEF= /DENABLE_OPENSSL
+OPENSSL_VER=1.1.1
+OPENSSL_DEF= /DENABLE_OPENSSL
 !IF "$(OPENSSL_DEF)" == "/DENABLE_OPENSSL"
 !IF "$(OPENSSL_DIR)" == ""
 !IF "$(PLATFORM)" == "x86"
